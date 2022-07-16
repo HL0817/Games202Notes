@@ -22,7 +22,7 @@
 + Pass 1:Render form light
 从光源位置出发，沿着光照方向记录每一个像素的场景最近深度，写入贴图中
 
-![SM_Pass_1](./images/SM_Pass_1.png)
+    ![SM_Pass_1](./images/SM_Pass_1.png)
 
 + Pass 2:Render from Eye
 从相机位置出发，渲染场景中的物体，将每个着色点在光源空间深度和 SM 中记录的最小深度作比较，着色点在光源空间深度更大时，着色点就在阴影中
@@ -33,14 +33,17 @@
 
 ### SM 的结果
 + Compare with and without shadows
-![Compare_with_and_without_shadows](./images/Compare_with_and_without_shadows.png)
+
+    ![Compare_with_and_without_shadows](./images/Compare_with_and_without_shadows.png)
 
 + The scene form the light's point-of-view 同场景下，光源空间的观察结果
-![The_scene_from_the_light's_point-of-view](./images/The_scene_from_the_light's_point-of-view.png)
+
+    ![The_scene_from_the_light's_point-of-view](./images/The_scene_from_the_light's_point-of-view.png)
 
 + The depth buffer form the light's point-of-view 阴影贴图的输出结果
 颜色越深，表示离光源越近
-![The_depth_buffer_from_the_light's_point-of-view](./images/The_depth_buffer_from_the_light's_point-of-view.png)
+
+    ![The_depth_buffer_from_the_light's_point-of-view](./images/The_depth_buffer_from_the_light's_point-of-view.png)
 
 ### Issues in Shadow Mapping
 #### Self occlusion
@@ -57,10 +60,13 @@
 
 
 + Bias and Peter Panning
-![Self_occlusion_Add_Bias](./images/Self_occlusion_Add_Bias.png)
+
+    ![Self_occlusion_Add_Bias](./images/Self_occlusion_Add_Bias.png)
 
     设置 bias 解决 Self occlusion 问题，我们人为的给相邻块的深度差设置一个容忍值 bias ，只要深度差小于 bias ，就认为没有出现遮挡（光照方向的夹角越小，自遮挡问题越严重，可以根据夹角大小灵活设置 bias）
+
     Bias 可以解决自遮挡产生的条纹，但是， Bias 可能会造成新的问题 —— Peter Panning
+    
     因为 bias 设置过大，会使物体和阴影产生分离
 
     ![Self_occlusion_Perer_Panning](./images/Self_occlusion_Perer_Panning.png)
@@ -73,36 +79,49 @@
     ![Self_occlusion_Second-depth_shadow_mapping](./images/Self_occlusion_Second-depth_shadow_mapping.png)
 
     最小和次小深度做平均，将均值作为场景深度比较的依据
+
     和原本的算法比，这个算法多了一次寻找次小深度的开销，算法的时间复杂度虽然仍是 O(n) 但是像素太多了，并不能被实时的要求给接受，**实时渲染不相信复杂度（RTR does not trust in COMPLEXITY）**
 
 #### Aliasing
 ![Aliasing](./images/Aliasing.png)
 
 如果 shadow map 的精度不够，就会发生阴影走样
+
 工业界有 Cascaded 方法，通过级联的方式减弱阴影的锯齿，但课程不涉及
 
 ## The math behind shadow mapping
 ### Calculus
 + 微积分中有许多有用的不等式
-如果 $f(x)$ 和 $g(x)$ 在 $[a, b]$ 上都可积，那么有：
-（Schwarz不等式）$\large \displaystyle [\int_{a}^{b}f(x)g(x)dx]^2 \leqslant \int_{a}^{b}f^2(x)dx \cdot \int_{a}^{b}g^2(x)dx$
-（Minkowski不等式）$\large \displaystyle \{\int_{a}^{b}[f(x) + g(x)]^2dx\}^{\frac 1 2} \leqslant [\int_{a}^{b}f^2(x)dx]^{\frac 1 2} + [\int_{a}^{b}g^2(x)dx]^{\frac 1 2}$
+
+    如果 $f(x)$ 和 $g(x)$ 在 $[a, b]$ 上都可积，那么有：
+    （Schwarz不等式）$\large \displaystyle [\int_{a}^{b}f(x)g(x)dx]^2 \leqslant \int_{a}^{b}f^2(x)dx \cdot \int_{a}^{b}g^2(x)dx$
+    （Minkowski不等式）$\large \displaystyle \{\int_{a}^{b}[f(x) + g(x)]^2dx\}^{\frac 1 2} \leqslant [\int_{a}^{b}f^2(x)dx]^{\frac 1 2} + [\int_{a}^{b}g^2(x)dx]^{\frac 1 2}$
+
 + Approximation in RTR
-在 RTR 领域里，我们更关注不等式中相等或近似相等条件，即把不等式当做近似相等来使用（在一些条件下）
+
+    在 RTR 领域里，我们更关注不等式中相等或近似相等条件，即把不等式当做近似相等来使用（在一些条件下）
+
 + An important approximation throughout RTR
-介绍一种 RTR 领域重要的常用的不等式，将乘积的积分近似为积分的乘积
-$\large \displaystyle \int_{\Omega}f(x)g(x)dx \approx \frac {\int_{\Omega}f(x)dx} {\int_{\Omega}dx} \cdot \int_{\Omega}g(x)dx$
+
+    介绍一种 RTR 领域重要的常用的不等式，将乘积的积分近似为积分的乘积
+    $\large \displaystyle \int_{\Omega}f(x)g(x)dx \approx \frac {\int_{\Omega}f(x)dx} {\int_{\Omega}dx} \cdot \int_{\Omega}g(x)dx$
     + 分母的意义是什么？
-    为了将两边的数量级约束在同一个水平内（保证大致能量守恒或保证数量级上能量相似），给近似式一个常数约束
-    举一个例子，如果 $f(x) = 2, 积分限[a, b] = [0, 3]$ 那么 $\int_{0}^{3}2g(x)dx = 2\int_{0}^{3}g(x)dx = \frac {\int_{0}^{3}2dx} {\int_{0}^{3}dx} \cdot \int_{0}^{3}g(x)dx = \frac{6}{3}\int_{0}^{3}g(x)dx = 2\int_{0}^{3}g(x)dx$
+
+        为了将两边的数量级约束在同一个水平内（保证大致能量守恒或保证数量级上能量相似），给近似式一个常数约束
+        举一个例子，如果 $f(x) = 2, 积分限[a, b] = [0, 3]$ 那么 $\int_{0}^{3}2g(x)dx = 2\int_{0}^{3}g(x)dx = \frac {\int_{0}^{3}2dx} {\int_{0}^{3}dx} \cdot \int_{0}^{3}g(x)dx = \frac{6}{3}\int_{0}^{3}g(x)dx = 2\int_{0}^{3}g(x)dx$
     + 近似式的准确的条件
         + 积分域（support）小
         + $g(x)$ 在积分域内足够光滑，变化不大
+
 + 对渲染方程做近似，将可见性分离到着色之外
-$\displaystyle L_o(p, \omega_o) = \int_{\Omega+}f_r(p, \omega_i, \omega_r)L_i(p, \omega_i)\cos\theta_iV(p, \omega_i)d\omega_i$
-近似可得：$\displaystyle L_o(p, \omega_o) \approx \frac{\int_{\Omega+}V(p, \omega_i)d\omega_i}{\int_{\Omega+}d\omega_i} \int_{\Omega+}f_r(p, \omega_i, \omega_r)L_i(p, \omega_i)\cos\theta_id\omega_i$
-这样我们可以不考虑可见性对着色点直接做 shading ，在最后才考虑可见性
-渲染方程准确近似的条件：
+
+    $\displaystyle L_o(p, \omega_o) = \int_{\Omega+}f_r(p, \omega_i, \omega_r)L_i(p, \omega_i)\cos\theta_iV(p, \omega_i)d\omega_i$
+    
+    近似可得：$\displaystyle L_o(p, \omega_o) \approx \frac{\int_{\Omega+}V(p, \omega_i)d\omega_i}{\int_{\Omega+}d\omega_i} \int_{\Omega+}f_r(p, \omega_i, \omega_r)L_i(p, \omega_i)\cos\theta_id\omega_i$
+
+    这样我们可以不考虑可见性对着色点直接做 shading ，在最后才考虑可见性
+
+    渲染方程准确近似的条件：
     + Small support (point / directional lighting)
     + Smooth integrand (diffuse bsdf / constant radiance area lighting)
 
@@ -122,16 +141,22 @@ PCF 最开始是作为阴影边缘抗锯齿的手段而提出，PCSS才是为了
 
 PCF是平均的思路，但不是对生成的 SM 做平均，也不是对着色点周围的深度做平均，而是在计算阴影时，对着色点周围深度比较后的结果做平均
 + Perform multiple depth comparisons for each fragment
-对于这个着色点，采样周围的深度并分别做深度比较
+
+    对于这个着色点，采样周围的深度并分别做深度比较
+
 + averages results of comparisons
-将周围所有深度比较的结果做平均，得到着色点的阴影均值
+
+    将周围所有深度比较的结果做平均，得到着色点的阴影均值
+
 + e.g.
     + 对着色点周围 $3 \times 3 $的像素做深度比较
     + 得到一组 $3 \times 3$ 的深度比较结果
     $\begin{pmatrix} 1 & 0 & 1 \\ 1 & 0 & 1 \\ 1 & 1 & 0 \end{pmatrix} $
     + 对深度比较结果做平均得到着色点的阴影值
+
 + PCF 的抗锯齿结果
-![PCF_result](./images/PCF_result.png)
+
+    ![PCF_result](./images/PCF_result.png)
 
 #### From PCF to PCSS
 在实际使用 PCF 的过程中，我们会发现 filter size 是非常重要的
@@ -146,6 +171,7 @@ PCF是平均的思路，但不是对生成的 SM 做平均，也不是对着色�
 
 + 阴影的接收物离阴影的投射物越近，阴影越硬
 + 阴影的接收物离阴影的投射物越远，阴影越软
+
 那么，阴影的软硬和遮挡物的距离有关
 
 用数学语言表示，$\large w_{Penumbra} = (d_{Receieve} - d_{Blocker} \cdot w_{Light} / d_{Blocker})$
