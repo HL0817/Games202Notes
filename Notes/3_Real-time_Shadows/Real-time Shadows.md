@@ -21,11 +21,13 @@
 ### 基本过程
 + Pass 1:Render form light
 从光源位置出发，沿着光照方向记录每一个像素的场景最近深度，写入贴图中
+
 ![SM_Pass_1](./images/SM_Pass_1.png)
 
 + Pass 2:Render from Eye
 从相机位置出发，渲染场景中的物体，将每个着色点在光源空间深度和 SM 中记录的最小深度作比较，着色点在光源空间深度更大时，着色点就在阴影中
-![SM_Pass_2](./images/SM_Pass_2.png)
+
+    ![SM_Pass_2](./images/SM_Pass_2.png)
 
     这里有个注意点，因为光源空间和相机空间的 MVP 不一样，需要在比较深度时做统一，通常是转换到光源空间作比较（在做投影时，挤压过程会将着色点推向远平面）
 
@@ -60,13 +62,15 @@
     设置 bias 解决 Self occlusion 问题，我们人为的给相邻块的深度差设置一个容忍值 bias ，只要深度差小于 bias ，就认为没有出现遮挡（光照方向的夹角越小，自遮挡问题越严重，可以根据夹角大小灵活设置 bias）
     Bias 可以解决自遮挡产生的条纹，但是， Bias 可能会造成新的问题 —— Peter Panning
     因为 bias 设置过大，会使物体和阴影产生分离
-![Self_occlusion_Perer_Panning](./images/Self_occlusion_Perer_Panning.png)
+
+    ![Self_occlusion_Perer_Panning](./images/Self_occlusion_Perer_Panning.png)
 
     工业界没有真正解决这个问题，而是在场景中寻找合适 bias 值去减小问题，让阴影不和物体分离，且不会产生自遮挡
 
 + Second-depth shadow mapping
 记录最小深度和次小深度解决 Self occlusion 问题
-![Self_occlusion_Second-depth_shadow_mapping](./images/Self_occlusion_Second-depth_shadow_mapping.png)
+
+    ![Self_occlusion_Second-depth_shadow_mapping](./images/Self_occlusion_Second-depth_shadow_mapping.png)
 
     最小和次小深度做平均，将均值作为场景深度比较的依据
     和原本的算法比，这个算法多了一次寻找次小深度的开销，算法的时间复杂度虽然仍是 O(n) 但是像素太多了，并不能被实时的要求给接受，**实时渲染不相信复杂度（RTR does not trust in COMPLEXITY）**
@@ -160,9 +164,11 @@ $\large w_{Penumbra}$ 表示阴影的柔和程度，越大越软
 为了算着色点的 filter size 我们在第一步中去了某个 size 来算计算遮挡物的平均深度，实际消耗上来说， PCSS 比固定大小的 PCF 更消耗性能一些
 
 那么 blocker search 的 size 怎么取呢，我们使用一种启发式的方法来选取
+
 ![PCSS_Blocker_search_size](./images/PCSS_Blocker_search_size.png)
 
 着色点连到光源，在 SM 上投影出来的 size 作为 blocker search 的范围
 
 PCSS 的结果还是不错的
+
 ![Dying_Light_example](./images/Dying_Light_example.png)
