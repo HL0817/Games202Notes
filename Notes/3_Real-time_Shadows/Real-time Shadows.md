@@ -22,16 +22,20 @@
 + Pass 1:Render form light
 从光源位置出发，沿着光照方向记录每一个像素的场景最近深度，写入贴图中
 ![SM_Pass_1](./images/SM_Pass_1.png)
+
 + Pass 2:Render from Eye
 从相机位置出发，渲染场景中的物体，将每个着色点在光源空间深度和 SM 中记录的最小深度作比较，着色点在光源空间深度更大时，着色点就在阴影中
 ![SM_Pass_2](./images/SM_Pass_2.png)
-这里有个注意点，因为光源空间和相机空间的 MVP 不一样，需要在比较深度时做统一，通常是转换到光源空间作比较（在做投影时，挤压过程会将着色点推向远平面）
+
+    这里有个注意点，因为光源空间和相机空间的 MVP 不一样，需要在比较深度时做统一，通常是转换到光源空间作比较（在做投影时，挤压过程会将着色点推向远平面）
 
 ### SM 的结果
 + Compare with and without shadows
 ![Compare_with_and_without_shadows](./images/Compare_with_and_without_shadows.png)
+
 + The scene form the light's point-of-view 同场景下，光源空间的观察结果
 ![The_scene_from_the_light's_point-of-view](./images/The_scene_from_the_light's_point-of-view.png)
+
 + The depth buffer form the light's point-of-view 阴影贴图的输出结果
 颜色越深，表示离光源越近
 ![The_depth_buffer_from_the_light's_point-of-view](./images/The_depth_buffer_from_the_light's_point-of-view.png)
@@ -39,10 +43,12 @@
 ### Issues in Shadow Mapping
 #### Self occlusion
 ![Self_occlusion](./images/Self_occlusion.png)
+
 原始的 SM 会在地板上产生一圈一圈的纹路
 
 原因很简单， SM 的这张贴图是有分辨率限制，每个像素都会表示场景中一块区域的深度，这块区域的深度被固定为了一个常数
 ![Self_occlusion_reason_0](./images/Self_occlusion_reason_0.png)
+
 在场景中连续的深度关系被离散成了块状的常数深度关系，那么相邻块之间就有可能产生深度差，从而导致自遮挡（self occlusion）
 
 一句话概括， SM 是离散的深度值，无法表示真实空间内连续的深度值
@@ -50,20 +56,24 @@
 
 + Bias and Peter Panning
 ![Self_occlusion_Add_Bias](./images/Self_occlusion_Add_Bias.png)
-设置 bias 解决 Self occlusion 问题，我们人为的给相邻块的深度差设置一个容忍值 bias ，只要深度差小于 bias ，就认为没有出现遮挡（光照方向的夹角越小，自遮挡问题越严重，可以根据夹角大小灵活设置 bias）
-Bias 可以解决自遮挡产生的条纹，但是， Bias 可能会造成新的问题 —— Peter Panning
-因为 bias 设置过大，会使物体和阴影产生分离
+
+    设置 bias 解决 Self occlusion 问题，我们人为的给相邻块的深度差设置一个容忍值 bias ，只要深度差小于 bias ，就认为没有出现遮挡（光照方向的夹角越小，自遮挡问题越严重，可以根据夹角大小灵活设置 bias）
+    Bias 可以解决自遮挡产生的条纹，但是， Bias 可能会造成新的问题 —— Peter Panning
+    因为 bias 设置过大，会使物体和阴影产生分离
 ![Self_occlusion_Perer_Panning](./images/Self_occlusion_Perer_Panning.png)
-工业界没有真正解决这个问题，而是在场景中寻找合适 bias 值去减小问题，让阴影不和物体分离，且不会产生自遮挡
+
+    工业界没有真正解决这个问题，而是在场景中寻找合适 bias 值去减小问题，让阴影不和物体分离，且不会产生自遮挡
 
 + Second-depth shadow mapping
 记录最小深度和次小深度解决 Self occlusion 问题
 ![Self_occlusion_Second-depth_shadow_mapping](./images/Self_occlusion_Second-depth_shadow_mapping.png)
-最小和次小深度做平均，将均值作为场景深度比较的依据
-和原本的算法比，这个算法多了一次寻找次小深度的开销，算法的时间复杂度虽然仍是 O(n) 但是像素太多了，并不能被实时的要求给接受，**实时渲染不相信复杂度（RTR does not trust in COMPLEXITY）**
+
+    最小和次小深度做平均，将均值作为场景深度比较的依据
+    和原本的算法比，这个算法多了一次寻找次小深度的开销，算法的时间复杂度虽然仍是 O(n) 但是像素太多了，并不能被实时的要求给接受，**实时渲染不相信复杂度（RTR does not trust in COMPLEXITY）**
 
 #### Aliasing
 ![Aliasing](./images/Aliasing.png)
+
 如果 shadow map 的精度不够，就会发生阴影走样
 工业界有 Cascaded 方法，通过级联的方式减弱阴影的锯齿，但课程不涉及
 
@@ -95,7 +105,9 @@ $\displaystyle L_o(p, \omega_o) = \int_{\Omega+}f_r(p, \omega_i, \omega_r)L_i(p,
 ## Percentage Closer Soft Filtering
 ### From Hard Shadows to Soft Shadows
 ![From_Hard_Shadow_to_Soft_Shadow](./images/From_Hard_Shadow_to_Soft_Shadow.png)
+
 面光源会对物体产生一个半阴影区域，而这个区域就算软阴影区域
+
 ![From_Hard_Shadow_to_Soft_Shadow_1](./images/From_Hard_Shadow_to_Soft_Shadow_1.png)
 
 ### Percentage Closer Filtering(PCF)
@@ -103,6 +115,7 @@ $\displaystyle L_o(p, \omega_o) = \int_{\Omega+}f_r(p, \omega_i, \omega_r)L_i(p,
 PCF 最开始是作为阴影边缘抗锯齿的手段而提出，PCSS才是为了实现软阴影被提出的
 #### PCF 基本过程
 ![PCF_example](./images/PCF_example.png)
+
 PCF是平均的思路，但不是对生成的 SM 做平均，也不是对着色点周围的深度做平均，而是在计算阴影时，对着色点周围深度比较后的结果做平均
 + Perform multiple depth comparisons for each fragment
 对于这个着色点，采样周围的深度并分别做深度比较
@@ -115,6 +128,7 @@ PCF是平均的思路，但不是对生成的 SM 做平均，也不是对着色�
     + 对深度比较结果做平均得到着色点的阴影值
 + PCF 的抗锯齿结果
 ![PCF_result](./images/PCF_result.png)
+
 #### From PCF to PCSS
 在实际使用 PCF 的过程中，我们会发现 filter size 是非常重要的
 + 小尺寸会使阴影变得锐利（棱角分明）
@@ -123,13 +137,17 @@ PCF是平均的思路，但不是对生成的 SM 做平均，也不是对着色�
 如果对 PCF 做一些改进，就能实现软阴影 —— 对阴影使用不同尺寸的 filtering
 
 分析一下什么时候使用软阴影，什么时候使用硬阴影
+
 ![PCSS_sharper_and_softer](./images/PCSS_sharper_and_softer.png)
+
 + 阴影的接收物离阴影的投射物越近，阴影越硬
 + 阴影的接收物离阴影的投射物越远，阴影越软
 那么，阴影的软硬和遮挡物的距离有关
 
 用数学语言表示，$\large w_{Penumbra} = (d_{Receieve} - d_{Blocker} \cdot w_{Light} / d_{Blocker})$
+
 ![PCSS_example](./images/PCSS_example.png)
+
 $\large w_{Penumbra}$ 表示阴影的柔和程度，越大越软
 
 #### PCSS 基本过程
@@ -143,6 +161,7 @@ $\large w_{Penumbra}$ 表示阴影的柔和程度，越大越软
 
 那么 blocker search 的 size 怎么取呢，我们使用一种启发式的方法来选取
 ![PCSS_Blocker_search_size](./images/PCSS_Blocker_search_size.png)
+
 着色点连到光源，在 SM 上投影出来的 size 作为 blocker search 的范围
 
 PCSS 的结果还是不错的
