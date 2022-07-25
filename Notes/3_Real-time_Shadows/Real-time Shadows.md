@@ -158,6 +158,7 @@ PCF是平均的思路，但不是对生成的 SM 做平均，也不是对着色�
 
     ![PCF_result](./images/PCF_result.png)
 
+### Percentage Closer Soft Filtering(PCSS)
 #### From PCF to PCSS
 在实际使用 PCF 的过程中，我们会发现 filter size 是非常重要的
 + 小尺寸会使阴影变得锐利（棱角分明）
@@ -174,7 +175,7 @@ PCF是平均的思路，但不是对生成的 SM 做平均，也不是对着色�
 
 那么，阴影的软硬和遮挡物的距离有关
 
-用数学语言表示，$\large w_{Penumbra} = (d_{Receieve} - d_{Blocker} \cdot w_{Light} / d_{Blocker})$
+用数学语言表示，$\large w_{Penumbra} = (d_{Receieve} - d_{Blocker}) \cdot w_{Light} / d_{Blocker}$
 
 ![PCSS_example](./images/PCSS_example.png)
 
@@ -198,3 +199,213 @@ $\large w_{Penumbra}$ 表示阴影的柔和程度，越大越软
 PCSS 的结果还是不错的
 
 ![Dying_Light_example](./images/Dying_Light_example.png)
+
+
+### The math behind PCF / PCSS
+![PCF_a_deeper_look_at_PCF](./images/PCF_a_deeper_look_at_PCF.png)
+
+Filter / convolution 的数学表达格式
+$\large \displaystyle [w * f](p) = \sum_{q \in \Nu(p)} w(p, q)f(q)$
+对图像做 filtering （加权平均） 就是对图像做卷积
++ $p$ 选取的点
++ $q$ 选取的点的邻域
++ $[w * f]$ 指对函数 $f$ 做 $w$ 卷积
++ $w(p, q)$ 指函数 $f$ 每一项的权重
+
+带入到 PCF / PCSS ，其数学表达如下：
+$\large \displaystyle V(x) = \sum_{q \in \Nu(p)} w(p, q) \cdot \chi^+[D_{SM}(q) - D_{scene}(x)]$
++ $\chi^+(value)$ 阶梯函数，$vauel > 0$ 函数值取 $1$ ，否则就取 $0$
+
+可以从数学公式中看出 PCF / PCSS 不是对 SM 做 filtering
+$V(x) \not= \chi^+{[w * D_{SM}](q) - D_{scene}(x)}$
+
+也可以看出 PCF / PCSS 不是对图像的结果做 filtering ，即不是在图像空间做模糊来做 AA
+$\displaystyle V(x) \not= \sum_{y \in \Nu(x)} w(y, x)V(x)$
+
+### PCSS 的缺点或优化思路
+#### 缺点
+PCSS 跑得比较慢，其 step 1 和 step 3 查询区域内所有像素的深度值非常耗时
+而且想要好的软阴影效果，filtering 的区域就设置较大，对应的耗时就很高
+
+#### 优化思路
+在区域内随机的取一些数量较少的样本来近似取全量样本的结果（蒙特卡洛的思想？）
+得到的结果肯定有噪声，但是随着降噪的技术的开发，用降噪后的结果来代替全量样本的结果，从而节省性能
+
+## Variance Soft Shadow Mapping
+VSSM(VSM) 是另一种解决 PCSS 缺点的思路 —— 对 PCSS 的 step 1 和 step 3 进行加速
+
+### 基本思路
+以 step 3 为例，对 “percentage closer” 进行拆解
+
+percentage closer 的本质是 PCF 阶段在 SM 所选采样范围内，统计纹素深度比着色点深度小的占比
+
+可以理解为计算给定范围内有多少纹素比给定值 t 更近
+
+有一个非常形象的例子进行解释：计算在一场考试中有多少学生的成绩比自己高，即统计自己成绩是百分之多少
+
+![VSSM_example_of_PCF](./images/VSSM_example_of_PCF.png)
+
+如果我们有考试成绩的直方图，可以很快算出自己成绩的排名
+
+如果将直方图转换成正太分布，可以计算出自己成绩排名的近似值
+
+计算排名就是以成绩为界限计算面积（计算分布的面积等价于概率中的概率密度函数（PDF），给定值和对应面积之间的关系被称为 累计分布函数（CDF））
+
+*题外话*
+
+![VSSM_CDF_of_a_Gaussian_PDF](./images/VSSM_CDF_of_a_Gaussian_PDF.png)
+
+*CDF 没有解析解，只有数值解*
+*高斯分布的 CDF 有对应的精确数值解的表，被称作 ErrFunction ， C++ 中有对应函数叫 erf()*
+
+回到 VSSM 话题里来，我们可以估算给定值 t 在阴影深度的分布的 PDF
+
+使用切比雪夫不等式对给定值 t 的 PDF 进行快速估计
+
+![VSSM_Chebychev's_Inequality_example](./images/VSSM_Chebychev's_Inequality_example.png)
+
+**Chebychev's Inequality:**$\Large \displaystyle P(x > t) \le \frac{\sigma^2}{\sigma^2 + (t - \mu)^2}$
++ $\mu$ 期望
++ $\sigma$ 方差
++ 约束条件 单峰 + $t > \mu$
++ 对于任意分布都有效，即对于任意分布，$x > t$ 的概率的上界可以由期望和方差计算出来
+
+我们将切比雪夫不等式当做等式来使用，假设 $\displaystyle P(x > t) \approx \frac{\sigma^2}{\sigma^2 + (t - \mu)^2}$
+
+如何快速计算期望和方差
++ Mean(averrage)
+    + Hardware MIPMAPing 不准确的（近似的）范围查询
+    + Summed Area Tables(SAT)
++ Variance
+    + $Var(X) = E(X^2) - E^2(X)$
+    计算方差必须知道 $E(X^2)$ ，所以我们在存储深度值的同时，还需要存储深度值的平方（在同一张 SM 的不同通道里进行记录）
+
+使用切比雪夫不等式近似法解决了 step 3 PCF 的效率问题，现在回过头来解决 step 1 Blocker Search 的效率问题
+
+假设着色点深度为 $t = 7$ ，蓝色表示遮挡物深度，红色表示非遮挡物深度
+
+![VSSM_Blocker_and_Non-Blocker](./images/VSSM_Blocker_and_Non-Blocker.png)
+
+$\Large \displaystyle \frac{N_1}{N}z_{unocc} + \frac{N_2}{N}z_{occ} = z_{avg}$
++ $z_{unocc}$ 非遮挡物的平均深度
++ $z_{occ}$ 遮挡物的平均深度
+
+可以使用切比雪夫近似得到 $P(x > t) = N_1 / N$
+那么 $1 - P(x > t) = N_2 / N$
+
+最后对非遮挡物的平均深度进行假设 $z_{unocc} = t$
+得到遮挡物的平均深度 $\large z_{occ} = \frac {z_{avg} - (N_1/N)z_{unocc}}{1 - N_1/N}$
+
+得到遮挡物的平均深度后，就得到了 step 1 的结果
+
+### 基本步骤
++ Shadow map generation
+    + 记录 $depth$ 和 $dpeth^2$
+    + SM mipmap
++ Runtime
+    + Mean of depth in a range O(1)
+    + Mean of depth square in a range O(1)
+    + Chebychev O(1)
+    + 根据 $P(x > t)$ 计算出遮挡物平均深度
+    + 根据遮挡物平均深度和光源信息计算出 filter size
+    + Mean of depth in a new range(filter size)
+
+### 结果
+
+![VSSM_Result](./images/VSSM_Result.png)
+
+由于一些降噪技术的进步，以及一些时域上的技术的开发，带噪声的快速 PCSS 渐渐以及开始取代 VSSM
+
+### VSSM 的其他细节
+将 VSSM 的核心数学思想抽取出来
+
+$\Large \displaystyle P(x \ge t) \le p_{max}(t) \equiv \frac{\sigma^2}{\sigma^2 + (t - \mu)^2}$
+
+使用切比雪夫不等式快速近似得到 $P(x \ge t)$ 的概率密度（PDF）或面积
+
+因此需要快速得到均值和方差，即需要快速得到一张图的平均值，列举两张方法
++ Mipmap
++ SAT
+
+#### Mipmap
+![level7_mipmap_example](./images/level7_mipmap_example.png)
+
+Mipmap 有三个特点 —— fast, approx, square ，即 Mipmap 是快速、近似、方形的区域查询
+
+#### SAT
+在范围内求平均等价于范围内求和（知道个数的前提下），SAT 本质就是求某个范围的和来得到这个范围的平均
+
+SAT 使用被称为前缀和（prefix sum）的数据结构和算法来快速获取某个范围的总和
+
+以 1D 的数组来介绍前缀和思想
+
+![VSSM_prefix_sum](./images/VSSM_prefix_sum.png)
+
++ Input 表示一个 1D 的数组
++ SAT 是预处理得到的前缀和，每个元素表示原始的 1D 数组从下标 0 到当前元素下标的总和
+    + 取原数组中间某一段 ab 的和等价于 b 的前缀和减去 a 的前缀和
+    即 $sum_{ab} = SAT(b) - SAT(a)$
+
+现在推广到 2D
+
+![VSSM_prefix_sum_2D](./images/VSSM_prefix_sum_2D.png)
+
+$SAT(x)$ 表示从左上角到对应点 x 的区域内所有值的累加和
+
+如果所示，蓝色区域的的累加和 = 右下点的SAT - 左下点的SAT - 右上点的SAT + 左上点的SAT（左上点的SAT被减去了两次，需要补回来）
+
+SAT 是准确的范围查询算法，但它需要 $O(n)$ 的时间和 $O(n)$的空间消耗
+存储应该没有问题，但是似乎不能做到很快的建立 SAT
+
+### VSSM 的问题
+![VSSM_issues](./images/VSSM_issues.png)
+
+VSSM 用切比雪夫不等式估计了阴影深度真实分布的 CDF 函数。对于左图这样的较为均匀的树枝（类似高斯分布）来说，估计较为准确（或者说缺陷不明显）；但对于右图这样，深度关系简单且差异巨大的深度分布来说，近似出来的 CDF 函数就非常不准确了（右图的三种深度关系具有不同的深度分布的峰值）。
+
+近似得到的 CDF 如果不准确，可能会造成两种错误情况：
++ Overly dark / 过黑：但阴影中黑一点，瑕疵不明显
++ Overky bright / 过亮：在阴影中有亮点或亮线，非常明显
+    过亮的根本原因如下图，估计出来的 $P(x \ge t)$ 远大于真实情况下的对应值
+
+    ![VSSM_issues_overly_bright](./images/VSSM_issues_overly_bright.png)
+
+瑕疵的表现被称为 Light leaking ，如下图所示
+
+![VSSM_issues_example0](./images/VSSM_issues_example0.png)
+
+![VSSM_issues_example1](./images/VSSM_issues_example1.png)
+
+## Moment Shadow Mapping
+### 简介
++ 目的
+    + 使用更准确的阴影深度分布来进行 CDF 计算
++ 思想
+    + 使用更高阶的矩（higher order moments）来表示阴影深度分布
++ Monments / 矩
+    + 有很多不同的定义
+    + 使用最简单的矩
+    $x, x^2, x^3, x^4, ...$
+    + VSSM 就是使用前两阶的矩来近似得到 CDF
+
+矩的作用：可以使用前面 $m$ 阶的矩来表示一个函数 $m/2$ 个阶跃（这里可以理解成峰值？）
+通常使用4阶矩就足够近似出比较准确的阴影的深度分布的 CDF
+
+![MSM_m_order_moments](./images/MSM_m_order_moments.png)
+
+由图可以看出 4阶矩的近似 CDF 的大致形状
+
+可以把 m 阶矩看成 m 阶展开，展开的数量越多（矩越多）表示的原函数越精确
+
+### 基本步骤
++ 其他步骤和 VSSM 相似
++ 在生成 SM 时，需要存储 $z, z^2, z^3, z^4$
++ 4阶矩计算
+
+### 优缺点
++ Pro: very nice results
+
+    ![MSM_results](./images/MSM_results.png)
+
++ Cons
+    + 需要额外的存储
+    + 计算比较复杂
