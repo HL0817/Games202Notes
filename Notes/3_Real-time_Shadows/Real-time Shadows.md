@@ -4,6 +4,8 @@
 + [Shadow Mapping](#shadow-mapping)
 + [The math behind shadow mapping](#the-math-behind-shadow-mapping)
 + [Percentage Closer Soft Filtering](#percentage-closer-soft-filtering)
++ [Variance Soft Shadow Mapping](#variance-soft-shadow-mapping)
++ [Moment Shadow Mapping](#moment-shadow-mapping)
 
 ## Shadow Mapping
 贴一下 Games101 的 [Shadow Mapping](https://github.com/HL0817/Games101Notes/blob/main/Notes/7_8_9_Shading/Shading.md#%E9%98%B4%E5%BD%B1%E8%B4%B4%E5%9B%BE)
@@ -376,6 +378,7 @@ VSSM 用切比雪夫不等式估计了阴影深度真实分布的 CDF 函数。�
 ![VSSM_issues_example1](./images/VSSM_issues_example1.png)
 
 ## Moment Shadow Mapping
+MSM 主要解决 VSSM 的深度分布不够精确，导致最后计算误差较大的问题
 ### 简介
 + 目的
     + 使用更准确的阴影深度分布来进行 CDF 计算
@@ -409,3 +412,108 @@ VSSM 用切比雪夫不等式估计了阴影深度真实分布的 CDF 函数。�
 + Cons
     + 需要额外的存储
     + 计算比较复杂
+
+## Distance Field Soft Shadow
+距离场阴影，是一种快速但存储空间要求较高的阴影技术，它的阴影效果如下图
+
+![SDF_results](./images/SDF_results.png)
+
+### Distance Functions
+距离场阴影的核心就是 Distance function(Signed Distance Function / SDF)
+
+可视化一个场景的 Distance Field
+
+![SDF_Distance_Field_Visualization](./images/SDF_Distance_Field_Visualization.png)
+
+SDF 是记录离物体最近的其他位置的距离的标量场
+
+字母 A 在图像空间中的 SDF 的可视化如下图：
+
+![SDF_Distance_functions_examples](./images/SDF_Distance_functions_examples.png)
+
+可以理解成字母 A 周围的等高线图
+
+以 e.g. Blending(linear interp.) a moving boundary 为例理解 Distance function 的作用
+
+![SDF_Distance_functions_usages](./images/SDF_Distance_functions_usages.png)
+
+A 和 B 分别表示同一个物体在时刻 A 和时刻 B 的运动状态，对 A 和 B 进行线性插值得到了 lerp(A, B)
+
+对 A 和 B 进行插值的本意是得到物体从时刻 A 到时刻 B 的运动状态的变化值，但直接进行线性插值，得到的结果并没有什么实际含义
+
+我们可以使用 SDF 对两个不同时刻进行插值，来获得物体在两个时刻间运动状态的变化值，如下图：
+
+![SDF_Distance_functions_usages_1](./images/SDF_Distance_functions_usages_1.png)
+
+我们分别获取时刻 A 和时刻 B 物体的 Distance function ，然后对 SDF(A) 和 SDF(B) 插值得到中间状态的 SDF(A->B) = lerp(SDF(A), SDF(B)) ，然后重新将 SDF(A->B) 的运动状态给还原出来
+
+Distance function 可以做任何形状的 blending 而不去关注他们的拓扑结果
+
+![SDF_blending_two_distance_functions](./images/SDF_blending_two_distance_functions.png)
+
+### The Usages of Distance Fields
+#### Ray Marching
+SDF 被广泛的应用于 Ray marching（或者被称作 Sphere tracing）
+
+![SDF_Ray_marching](./images/SDF_Ray_marching.png)
+
+现在已知光线起点和它的步进方向，同时知道这个点的 SDF
+
+光线在步进距离选取时，可以根据距离场得到一个离光线起点最近物体的距离值
+
+这个距离可以被理解为以光线起点为球心，以最近距离为半径的球体内，没有任何其他物体与光线起点相交，我们不妨称这段距离为安全距离
+
+将安全距离作为此次步进的距离，按照步进方向和步进距离得到下一个迭代后的光线起点
+
+以 SDF 确定出来的安全距离作为步进距离，大大缩短了 Ray marching 步进的次数
+
+#### Shadow
+用 SDF 可以生成 Soft shadow
+
+核心思路是用 SDF 来估计着色点的被遮挡信息
+
+![SDF_Soft_shadow](./images/SDF_Soft_shadow.png)
+
+对于一个面光源来说，着色点和面光源的连线形成的夹角是面光源对着色点的最大可视角度
+
+我们可以从着色点往面光源发射一根光线，在光线上对它的一些列点做 SDF 取值，可以得到一个最小安全距离
+
+这个安全距离，我们稍作转换，将它所在的安全球体与着色点做连线，得到安全球体与着色点的夹角（3 维空间就是立体角），将这个夹角称为安全可视角度
+
+我们近似的将安全可视角度与最大可视角度的比值看做是着色点的非遮挡区域的占比
+
+那么自然可以得到面光源在着色点的被遮挡占比，然后用来对阴影做计算
+
+取 SDF 的过程仍然是 Ray marching ，即从着色点出发沿着面光源的中点做光线步进
+
+![SDF_Soft_shadow_ray_matching](./images/SDF_Soft_shadow_ray_matching.png)
+
+找出步进方向上最小的安全可视角度，作为真正使用的安全可视角度
+
+图中可以看出 $\cos\theta = \frac{SDF(p)}{OP}$ ，$\theta = \arccos \frac{SDF(p)}{OP}$
+
+这里可以避免做复杂的 $\arccos$ 操作，直接以 $min\{ \frac{k \cdot SDF(p)}{OP} , 1.0\}$ 作为阴影的计算信息
+
+解释一下这里的 $k$ 的作用，用来表示阴影的软硬程度， $k$ 越大阴影越“硬”
+
+![SDF_Soft_shadow_k_results](./images/SDF_Soft_shadow_k_results.png)
+### Pros and Cons of Distance Field
++ Pros
+    + Fast —— 做 Ray Marching 或者做 Soft Shadow 非常快
+    但是这是不考虑生成 SDF 的情况下（不考虑生成 SM 的时间，Shadow Map 方案做阴影也很快）
+    + High quelity —— 由于距离场的原因，阴影质量也很高
++ Cons
+    + Need precomputation —— 生成 SDF 需要预计算
+    + Need heavy storage —— SDF 数据量麻烦，需要占用大量存储空间
+    运动物体、形变物体难以处理
+    + Artifact —— 接缝之类的问题
+    + SDF 生成的物体非常不好处理贴纹理的问题（距离场阴影不需要考虑这种问题）
+
+### 优化思路
+SDF 在3维空间下，需要海量的存储空间，空间中每一个点都需要计算一个最小距离并存储
+
+但肯定不能存储每一个点，需要特别的存储结构
+
+这里可以类比光线追踪的求交优化，对空间进行划分（8 叉树之类的），从而进行存储优化
+
+但是深度学习的压缩 SDF 数据并不合适，实时状态下无法使用压缩解压缩的模型过一遍神经网络才解算出 SDF

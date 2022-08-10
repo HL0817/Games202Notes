@@ -14,9 +14,8 @@
             + Create shader => Compile shader => attack shader to program => Link program => Use program
         + The Rendering Equation
             + $L_o(p, \omega_o) = L_e(p, \omega_o) + \displaystyle\int_{H^2}f_r(p, \omega_i \rightarrow \omega_r)L_i(p, \omega_i)\cos\theta_iV(p, \omega_i)d\omega_i$
-                + $V(p, \omega_i)$ 是这个方向光的可见性
-        + Calculus
-    + [Real-time Shadows]()
+            $V(p, \omega_i)$ 是这个方向光的可见性
+    + [Real-time Shadows](./Notes/3_Real-time_Shadows/Real-time%20Shadows.md)
 
 ****
 他人[笔记](https://blog.csdn.net/qq_38065509)，作参考
