@@ -79,6 +79,10 @@ $f_r(p, \omega_i \rightarrow \omega_r)$ 表示 BRDF 的分布
 
 ![IBL_query_prefiltering_environment_lighting](./images/IBL_query_prefiltering_environment_lighting.png)
 
+根据着色点的法线分布计算出来反射范围，然后使用这个反射对 environment lighting 进行查询并积分的过程，可以近似成对 environment lighting 做 prefiltering （做模糊）然后对结果做范围查询
+
+对 environment lighting 做多次查询并积分 等价于 对 environment lighting 做 prefiltering 然后进行单次范围查询
+
 最后根据反射方向对预处理后的 environment lighting 进行查询
 + 查询方向：镜面反射方向
 + 查询范围：实时计算出的 BRDF 的反射分布所覆盖的区域（这也是提前对 Environment Lighting 做 prefilter 的原因，区域查询时可以直接快速得到数值）
@@ -235,8 +239,55 @@ $m$ 表示球谐基函数的阶数（order），即对应级数的基函数的�
 
 我们只需要知道一点，$\displaystyle f(x) = \sum_{l = 0}^{\infty} \sum_{k = -l}^{l}P_{lm}(\cos\theta)e^{im\varphi} = \sum\sum K_l^mY_{lm}$
 
-$K_l^m$ 是球谐系数， $Y_{lm}$ 是球谐基函数
+$K_l^m$ 是球谐系数，这里将它记作 $c_i$
+$Y_{lm}$ 是球谐基函数，这里将它记作 $B_i(\omega)$
 
-如果将原函数 $f(\omega)$ 投影到球谐基 $B_i(\omega)$ 上，就可以得到唯一的球谐系数 $c_i$ ，即 $\displaystyle c_i = \int_{\Omega}f(\omega)B_i(\omega)d\omega$
+**球谐函数具有正交完备性，球谐基函数组是正交归一化的**，如果将原函数 $f(\omega)$ **投影**到球谐基 $B_i(\omega)$ 上，就可以得到唯一的球谐系数 $c_i$ ，即 $\displaystyle c_i = \int_{\Omega}f(\omega)B_i(\omega)d\omega$
+
+（投影可以类比向量在正交的坐标系内的坐标值，向量分别朝向不同坐标轴投影得到向量在这个坐标系内的系数，也被称作坐标值）
 
 在球谐基不变时，只要知道球谐系数，就能恢复出来唯一的一个原函数（是近似的原函数，因为展开过程就是近似过程，除非级数无穷大才能完全恢复）
+
+球谐系数越多（阶数越多），反算出来的原函数越精确，或者是包含的频率信息越高，大多情况只取了前 2 或 3 阶进行处理
+
+### Lighting with SH
+回到渲染领域来， Prof. Ravi Ramamoorthi 把 SH 给引入到了图形学中
+
+前文在对 environment lighting 做积分和归一化时提到了，对 environment lighting 做多次查询并积分 等价于 对 environment lighting 做 prefiltering 然后进行单次范围查询
+
+也就是 no filtering + multiple queries = prefiltering + single query
+
+![PRT_filtering_and_multiqueries](./images/PRT_filtering_and_multiqueries.png)
+
+Ravi 对 Diffuse BRDF 做了观察，发现在渲染方程中， Diffuse BRDF 和光线做乘积然后积分起来就相当于对光线的函数做卷积，即对光线做滤波操作，而 Diffuse BRDF 具有平滑的分布，那么整个过程就相当于对光线做低通滤波
+
+既然 Diffuse BRDF 是低频分布的函数，那么使用 SH 对函数做了处理之后，就可以只使用少量（低阶）的球谐系数来存储 Diffuse BRDF 的绝大部分信息
+
+![PRT_Analytic_Irradiance_Formula](./images/PRT_Analytic_Irradiance_Formula.png)
+
+像 $E_{lm} = A_l L_{lm}$ 这样将 BRDF 项投影到基函数上得到上图的各个不同阶的球谐系数，可以看见 BRDF 项的大部分信息都只包含在前三阶的系数中，第四阶往后的系数基本为 0 （其中 $\displaystyle A_l = 2\pi \frac{(-1)^{\frac{l}{2} - 1}}{(l + 2)(l - 1)} [\frac{l!}{2^l (\frac{l}{2} !)^2}]$ ）
+
+在回顾章节中，我们知道了两个函数卷积之后的频率由卷积前的较低频率的函数决定，那么低频的 Diffuse BRDF 和高频的光线函数卷积之后得到的低频的光照信息（显然的，Diffuse 的物体反射出来的光就不可能很复杂）
+
+Diffuse BRDF 本身就只包含前三阶的低频信息，那么卷积后的结果也应该只包含前几阶的低频信息
+
+**既然渲染的整体结果都只包含低频信息，那么光照本身就不需要完整的保存，我们同样可以使用前 n 阶的 SH 来近似原本的光照**
+
+下面给出前 3 阶 SH 描述光线之后的着色结果
++ order 0 1 term RMS Error = 25%
+
+    ![PRT_SH_Order0_lighting_result](./images/PRT_SH_Order0_lighting_result.png)
+
++ order 1 4 terms RMS Error = 8%
+
+    ![PRT_SH_Order01_lighting_result](./images/PRT_SH_Order01_lighting_result.png)
+
++ order 2 9 terms RMS Error = 1%
+
+    ![PRT_SH_Order012_lighting_result](./images/PRT_SH_Order012_lighting_result.png)
+
+可以看到前三阶 SH 近似描述光线之后（仅在 Diffuse BRDF 材质上）的着色结果已经几乎一致了
+
+其他学者已经证明了在 Diffuse BRDF 材质条件下，任何光照在 3 阶 SH 的近似描述下，平均误差 $error < 3%$
+
+通过对 Diffuse BRDF 渲染过程及结果的分析，可以最终确认使用前 3 阶 SH 对光照进行处理
