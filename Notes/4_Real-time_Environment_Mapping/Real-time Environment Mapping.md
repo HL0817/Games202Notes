@@ -250,6 +250,17 @@ $Y_{lm}$ 是球谐基函数，这里将它记作 $B_i(\omega)$
 
 球谐系数越多（阶数越多），反算出来的原函数越精确，或者是包含的频率信息越高，大多情况只取了前 2 或 3 阶进行处理
 
+**球谐函数具有旋转不变性**，如果原函数 $f(\omega)$ 可以被某个球谐基表示，那么这个原函数旋转之后的新函数 $g(\omega)$ 仍可以用同一个球谐基表示，且对球谐系数进行旋转就能得到旋转后新函数的球谐系数
+
+也就是 $\displaystyle f(\omega)= \sum c_iB_i(\omega)d\omega$ 和 $\displaystyle g(\omega) = f(R(\omega))= \sum d_iB_i(\omega)d\omega$
+
+对于旋转球谐系数有两种理解：
++ 球谐基不变，原球谐系数旋转得到新球谐系数
++ 球谐系数不变，
+    + 将原球谐基进行对应旋转得到新的球谐基
+    + 将新的球谐基投影到原球谐基上，得到旋转球谐基所生成的旋转系数
+    + 原球谐系数和旋转系数相乘得到旋转后的新球谐系数
+
 ### Lighting with SH
 回到渲染领域来， Prof. Ravi Ramamoorthi 把 SH 给引入到了图形学中
 
@@ -291,3 +302,53 @@ Diffuse BRDF 本身就只包含前三阶的低频信息，那么卷积后的结�
 其他学者已经证明了在 Diffuse BRDF 材质条件下，任何光照在 3 阶 SH 的近似描述下，平均误差 $error < 3%$
 
 通过对 Diffuse BRDF 渲染过程及结果的分析，可以最终确认使用前 3 阶 SH 对光照进行处理
+
+### PRT
+在之前的小节里，知道了什么是卷积、球谐以及卷积和球谐如何运用到环境光照中，本节将通过“球谐处理后的光照结合渲染方程进行后续”的整个过程，来说明什么是 PRT
+
+对于带可见性的渲染方程 $\displaystyle L(\mathbf{o}) = \int_{\Omega} L(\mathbf{i})V(\mathbf{i})\rho(\mathbf{i}, \mathbf{o})max(0, \mathbf{n} \cdot \mathbf{i})d\mathbf{i}$ 来说
+我们将 $L(\mathbf{i})V(\mathbf{i})\rho(\mathbf{i}, \mathbf{o})max(0, \mathbf{n} \cdot \mathbf{i})$ 看做不同的三个部分，在实时的情况下，并不能直接搞蒙特卡洛采样求积分，也不能 splt sum 累加求积分，所以我们需要将这三个部分分别做预计算
+
+预计算的结果，在实时渲染中以不同的三张图来表示，即 lighting visibility BRDF
+（这里 lighting visibility 都是基于光照方向进行数据处理和存储的，但是 BRDF 的查询需要光照方向和观察方向，似乎不能用 2 维的图来存储，但我们的观察方向可以看做是固定方向，所以仅存储不同光照方向+固定观察方向的 BRDF 值即可达到目的）
+
+![PRT_PRT_Rendering_Equation](./images/PRT_PRT_Rendering_Equation.png)
+
+着色时，采样三张图并相乘就能得到最终的着色结果
+
+但对于每一个着色点，都需要这样三张 cubemap 来存储预计算数据，存储很费
+
+所以 Sloan 提出了 Precomputed Radiance Transfer ，结合 SH 对光照的处理来重新处理渲染方程（【Precomputed Radiance Transfer for Real-Time Rendering in Dynamic, Low-Frequency Lighting Environments】(Sloan SIGGRAPH 2002)）
+
+PRT 的基本思路如下：
+$$\displaystyle L(\mathbf{o}) = \int_{\Omega} L(\mathbf{i})V(\mathbf{i})\rho(\mathbf{i}, \mathbf{o})max(0, \mathbf{n} \cdot \mathbf{i})d\mathbf{i}$$
+以是否和光照相关作为划分条件，渲染方程被分成 lighting - $L(\mathbf{i})$ 和 light transport - $V(\mathbf{i})\rho(\mathbf{i}, \mathbf{o})max(0, \mathbf{n} \cdot \mathbf{i})$ 两个部分
+
+在场景中除了光照以外的其他所有条件都不会发生变化的情况下， light transport 可以被看做是一个球面函数，我们可以将 light transport 也写成基函数表示，大致分为三个步骤：
++ 球谐基对光照函数做近似
+    + $L(\mathbf{i}) \approx \sum l_iB_i(\mathbf{i})$
++ 预计算 —— precomputed transport
+    + 将 light transport 投影到光照函数所使用的球谐基上
++ 运行时直接相乘
+
+以 Diffuse 为例进行说明
+Diffuse BRDF 项是一个常数，在渲染方程中可以直接将 BRDF 项提出来
+$$\displaystyle L(\mathbf{o}) = \rho \int_{\Omega} L(\mathbf{i})V(\mathbf{i})max(0, \mathbf{n} \cdot \mathbf{i})d\mathbf{i}$$
+
+对于光照，我们使用球谐进行表达 $L(\mathbf{i}) \approx \sum l_iB_i(\mathbf{i})$
+
+将球谐表示的光照带入渲染方程得
+$$\displaystyle L(\mathbf{o}) \approx \rho \int_{\Omega} \sum l_iB_i(\mathbf{i})V(\mathbf{i})max(0, \mathbf{n} \cdot \mathbf{i})d\mathbf{i}$$
+
+交换积分和求和的顺序（积分和求和的顺序需要满足一定条件才可以交换，这里是直接交换算是假设交换前后结果相等或者近似）得
+$$\displaystyle L(\mathbf{o}) \approx \rho \sum l_i \int_{\Omega} B_i(\mathbf{i})V(\mathbf{i})max(0, \mathbf{n} \cdot \mathbf{i})d\mathbf{i}$$
+
+而 $\displaystyle \int_{\Omega} B_i(\mathbf{i})V(\mathbf{i})max(0, \mathbf{n} \cdot \mathbf{i})d\mathbf{i}$ 这个过程就是 light transp 项投影到球谐基的过程（SH 小节中关于球谐系数的说明）
+
+显然，可以将球谐基和 light transport 项的投影过程放到离线预计算中去，将结果记作 $T_i$
+
+对于实时渲染来说，计算着色就仅仅只做一次点乘 $L(\mathbf{o}) \approx \rho \sum l_iT_i$
+
+但是，对于上述的过程，有几个问题：
++ 除光照以外的所有条件都是不变的，意味着场景需要是静态的
++ 切换光照就相当于切换不同的球谐系数，那么旋转光照就要稍微处理一下（球谐的旋转不变性）
