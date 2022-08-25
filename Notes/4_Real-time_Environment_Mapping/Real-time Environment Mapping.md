@@ -331,7 +331,9 @@ $$\displaystyle L(\mathbf{o}) = \int_{\Omega} L(\mathbf{i})V(\mathbf{i})\rho(\ma
     + 将 light transport 投影到光照函数所使用的球谐基上
 + 运行时直接相乘
 
-以 Diffuse 为例进行说明
+
+
+#### Diffuse Case
 Diffuse BRDF 项是一个常数，在渲染方程中可以直接将 BRDF 项提出来
 $$\displaystyle L(\mathbf{o}) = \rho \int_{\Omega} L(\mathbf{i})V(\mathbf{i})max(0, \mathbf{n} \cdot \mathbf{i})d\mathbf{i}$$
 
@@ -343,12 +345,77 @@ $$\displaystyle L(\mathbf{o}) \approx \rho \int_{\Omega} \sum l_iB_i(\mathbf{i})
 交换积分和求和的顺序（积分和求和的顺序需要满足一定条件才可以交换，这里是直接交换算是假设交换前后结果相等或者近似）得
 $$\displaystyle L(\mathbf{o}) \approx \rho \sum l_i \int_{\Omega} B_i(\mathbf{i})V(\mathbf{i})max(0, \mathbf{n} \cdot \mathbf{i})d\mathbf{i}$$
 
-而 $\displaystyle \int_{\Omega} B_i(\mathbf{i})V(\mathbf{i})max(0, \mathbf{n} \cdot \mathbf{i})d\mathbf{i}$ 这个过程就是 light transp 项投影到球谐基的过程（SH 小节中关于球谐系数的说明）
+**$\displaystyle \int_{\Omega} B_i(\mathbf{i})V(\mathbf{i})max(0, \mathbf{n} \cdot \mathbf{i})d\mathbf{i}$ 这个过程就是 light transp 项投影到球谐基的过程（SH 小节中关于球谐系数的说明）**
 
 显然，可以将球谐基和 light transport 项的投影过程放到离线预计算中去，将结果记作 $T_i$
 
 对于实时渲染来说，计算着色就仅仅只做一次点乘 $L(\mathbf{o}) \approx \rho \sum l_iT_i$
 
+#### PRT 的核心理解
+渲染方程
+$$\displaystyle L_{\mathbf{o}}(p, \mathbf{\omega_o}) = \int_{\Omega^+} L_i(p, \mathbf{\omega_i})f_r(p, \mathbf{\omega_i}, \mathbf{\omega_o}) \cos\theta_{\mathbf{\omega_i}} V(p, \mathbf{\omega_i})d\mathbf{\omega_i}$$
+被分成 lighting 和 light transport 两个部分，分别记作
+$$\begin{equation*} \begin{split}\displaystyle
+&L_(\mathbf{\omega_i}) = L_i(p, \mathbf{\omega_i})
+\\
+&T_(\mathbf{\omega_i}) = f_r(p, \mathbf{\omega_i}, \mathbf{\omega_o}) \cos\theta_{\mathbf{\omega_i}} V(p, \mathbf{\omega_i})
+\end{split} \end{equation*}$$
+分别对 lighting 和 light transport 做球谐近似
+$$\begin{equation*} \begin{split}\displaystyle
+&L_(\mathbf{\omega_i}) = L_i(p, \mathbf{\omega_i}) \approx \sum_p c_p B_p(\mathbf{\omega_i})
+\\
+&T_(\mathbf{\omega_i}) = f_r(p, \mathbf{\omega_i}, \mathbf{\omega_o}) \cos\theta_{\mathbf{\omega_i}} V(p, \mathbf{\omega_i}) \approx \sum_q c_q B_q(\mathbf{\omega_i})
+\end{split} \end{equation*}$$
+然后带回渲染方程中，交换积分和求和的次序，可得
+$$\begin{equation*} \begin{split}
+\displaystyle L_{\mathbf{o}}(p, \mathbf{\omega_o})
+&= \int_{\Omega^+} L_i(p, \mathbf{\omega_i})f_r(p, \mathbf{\omega_i}, \mathbf{\omega_o}) \cos\theta_{\mathbf{\omega_i}} V(p, \mathbf{\omega_i})d\mathbf{\omega_i}
+\\
+&= \sum_p \sum_q c_p c_q\int_{\Omega^+} B_p(\mathbf{\omega_i}) B_q(\mathbf{\omega_i})d\mathbf{\omega_i}
+\end{split} \end{equation*}$$
+
+在 Diffuse Case 里最终得到的结果仅仅是 $O(n)$ 复杂度的计算结果，为什么换了一个理解思路就变成 $O(N^2)$ ，这跟球谐函数的正交不变性有关
+
+$\displaystyle \int_{\Omega^+} B_p(\mathbf{\omega_i}) B_q(\mathbf{\omega_i})$ 是将 $B_p(\mathbf{\omega_i})$ 投影到 $B_q(\mathbf{\omega_i})$ （或将 $B_q(\mathbf{\omega_i})$ 投影到 $B_p(\mathbf{\omega_i})$）上，两个正交基互相投影，只有当前仅当 $p = q$ 时才能得到投影系数 $1$ ，如果不等整个式子直接为 $0$
+
+在 $p = q$ 的前提下，$\displaystyle \sum_p \sum_q c_p c_q\int_{\Omega^+} B_p(\mathbf{\omega_i}) B_q(\mathbf{\omega_i})d\mathbf{\omega_i}$ 的复杂度仅为 $O(n)$
+
+#### Glossy Case
+在渲染方程中
+$$\displaystyle L(\mathbf{o}) = \int_{\Omega} L(\mathbf{i}) \rho(\mathbf{i}, \mathbf{o}) V(\mathbf{i})max(0, \mathbf{n} \cdot \mathbf{i})d\mathbf{i}$$
+与 Diffuse 不同的是，Glossy BRDF 项不是常量，而是一个 4 维的函数 $\rho(\mathbf{i}, \mathbf{o})$ ，处理过程如下
+
+还是将渲染方程的 lighting 投影到基函数上
+
+$$\displaystyle L(\mathbf{o}) \approx \sum l_i \int_{\Omega} B_i(\mathbf{i}) \rho(\mathbf{i}, \mathbf{o}) V(\mathbf{i})max(0, \mathbf{n} \cdot \mathbf{i})d\mathbf{i}$$
+
+$\displaystyle \int_{\Omega} B_i(\mathbf{i}) \rho(\mathbf{i}, \mathbf{o}) V(\mathbf{i})max(0, \mathbf{n} \cdot \mathbf{i})d\mathbf{i}$ 仍然可以理解为投影过程，将 4 维的 light transport 投影到 $B_i(\mathbf{i})$ 上
+
+得到一个只剩 2 维函数 $T_i(\mathbf{o})$
+
+再讲这个 2 维函数投影到另一个球谐基上 $\displaystyle T_i(\mathbf{o}) \approx \sum t_{ij}B_j(\mathbf{o})$
+
+做一次投影得到一组球谐系数，那么做两次投影得到的是一个球谐系数的矩阵 $t_{ij}$
+
+最后将 lighting 球谐系数和 light transport 球谐矩阵做点乘得到着色结果
+
+$$\displaystyle L_{\mathbf{o}} = \sum(\sum l_it_{ij}) B_j(\mathbf{o})$$
+
+用图像理解上述整个过程
+
+![PRT_Glossy_Rendering](./images/PRT_Glossy_Rendering.png)
+
+### PRT 的结果
 但是，对于上述的过程，有几个问题：
 + 除光照以外的所有条件都是不变的，意味着场景需要是静态的
 + 切换光照就相当于切换不同的球谐系数，那么旋转光照就要稍微处理一下（球谐的旋转不变性）
+
+直接给出 Sloan 的 PRT 演示结果
+
++ Diffuse Case
+
+    ![PRT_PRT_Result](./images/PRT_PRT_Result.png)
+
++ Glossy Case
+
+### Limitations
