@@ -310,7 +310,11 @@ Diffuse BRDF 本身就只包含前三阶的低频信息，那么卷积后的结�
 我们将 $L(\mathbf{i})V(\mathbf{i})\rho(\mathbf{i}, \mathbf{o})max(0, \mathbf{n} \cdot \mathbf{i})$ 看做不同的三个部分，在实时的情况下，并不能直接搞蒙特卡洛采样求积分，也不能 splt sum 累加求积分，所以我们需要将这三个部分分别做预计算
 
 预计算的结果，在实时渲染中以不同的三张图来表示，即 lighting visibility BRDF
-（这里 lighting visibility 都是基于光照方向进行数据处理和存储的，但是 BRDF 的查询需要光照方向和观察方向，似乎不能用 2 维的图来存储，但我们的观察方向可以看做是固定方向，所以仅存储不同光照方向+固定观察方向的 BRDF 值即可达到目的）
++ lighting: 表示着色点接受到的环境光，用一张 cubemap 记录
++ visibility: 表示着色点各个方向的可见性，用 0 和 1 来存储某个光照方向被遮挡或者不被遮挡，用一张 cubemap 记录
++ BRDF: 表示观察方向确定时，不同光线入射方向所对应的 BRDF 值，用一张 cubemap 记录
+    + BRDF 本来应该由观察方向和光线入射方向的积分两个因素决定，但是我们着色时，观察方向固定，就可以用 cubemap 记录不同方向的 BRDF 数值
+    + 方向可以由极坐标的 $\theta$ $\varphi$ 确定，BRDF 由两个方向确定，那么对于极坐标或者球面坐标来说，BRDF 是一个 4 维的函数，去掉观察方向后就是一个 2 维的函数
 
 ![PRT_PRT_Rendering_Equation](./images/PRT_PRT_Rendering_Equation.png)
 
