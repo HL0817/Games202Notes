@@ -345,7 +345,7 @@ $$\displaystyle L(\mathbf{o}) \approx \rho \int_{\Omega} \sum l_iB_i(\mathbf{i})
 交换积分和求和的顺序（积分和求和的顺序需要满足一定条件才可以交换，这里是直接交换算是假设交换前后结果相等或者近似）得
 $$\displaystyle L(\mathbf{o}) \approx \rho \sum l_i \int_{\Omega} B_i(\mathbf{i})V(\mathbf{i})max(0, \mathbf{n} \cdot \mathbf{i})d\mathbf{i}$$
 
-**$\displaystyle \int_{\Omega} B_i(\mathbf{i})V(\mathbf{i})max(0, \mathbf{n} \cdot \mathbf{i})d\mathbf{i}$ 这个过程就是 light transp 项投影到球谐基的过程（SH 小节中关于球谐系数的说明）**
+**$\displaystyle \int_{\Omega} B_i(\mathbf{i})V(\mathbf{i})max(0, \mathbf{n} \cdot \mathbf{i})d\mathbf{i}$ 这个过程就是 light transport 项投影到球谐基的过程（SH 小节中关于球谐系数的说明）**
 
 显然，可以将球谐基和 light transport 项的投影过程放到离线预计算中去，将结果记作 $T_i$
 
