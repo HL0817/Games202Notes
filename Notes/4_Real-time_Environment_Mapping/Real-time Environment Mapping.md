@@ -389,25 +389,69 @@ $\displaystyle \int_{\Omega^+} B_p(\mathbf{\omega_i}) B_q(\mathbf{\omega_i})$ �
 $$\displaystyle L(\mathbf{o}) = \int_{\Omega} L(\mathbf{i}) \rho(\mathbf{i}, \mathbf{o}) V(\mathbf{i})max(0, \mathbf{n} \cdot \mathbf{i})d\mathbf{i}$$
 与 Diffuse 不同的是，Glossy BRDF 项不是常量，而是一个 4 维的函数 $\rho(\mathbf{i}, \mathbf{o})$ ，处理过程如下
 
-还是将渲染方程的 lighting 投影到基函数上
+还是将渲染方程的 lighting 投影到基函数上，得到
 
 $$\displaystyle L(\mathbf{o}) \approx \sum l_i \int_{\Omega} B_i(\mathbf{i}) \rho(\mathbf{i}, \mathbf{o}) V(\mathbf{i})max(0, \mathbf{n} \cdot \mathbf{i})d\mathbf{i}$$
 
-$\displaystyle \int_{\Omega} B_i(\mathbf{i}) \rho(\mathbf{i}, \mathbf{o}) V(\mathbf{i})max(0, \mathbf{n} \cdot \mathbf{i})d\mathbf{i}$ 仍然可以理解为投影过程，将 4 维的 light transport 投影到 $B_i(\mathbf{i})$ 上
+其中 $\displaystyle \int_{\Omega} B_i(\mathbf{i}) \rho(\mathbf{i}, \mathbf{o}) V(\mathbf{i})max(0, \mathbf{n} \cdot \mathbf{i})d\mathbf{i}$ 仍然可以理解为投影过程，即将 4 维的 light transport 投影到 $B_i(\mathbf{i})$ 上，得到一个只剩 2 维函数 $T_i(\mathbf{o})$
 
-得到一个只剩 2 维函数 $T_i(\mathbf{o})$
+此时渲染方程转变成为
 
-再讲这个 2 维函数投影到另一个球谐基上 $\displaystyle T_i(\mathbf{o}) \approx \sum t_{ij}B_j(\mathbf{o})$
+$$\displaystyle L(\mathbf{o}) \approx \sum l_i T_i(\mathbf{o})$$
 
-做一次投影得到一组球谐系数，那么做两次投影得到的是一个球谐系数的矩阵 $t_{ij}$
+对于 Glossy 材质来说，某个观察角度 $\mathbf{o}$ 对应着唯一一个 light transport 函数 $T_i(\mathbf{o})$
 
-最后将 lighting 球谐系数和 light transport 球谐矩阵做点乘得到着色结果
+接下来，再将这个 2 维函数（在球面坐标下，方向 $\mathbf{o}$ 由 2 维 $\theta$ 和 $\varphi$ 确定）投影到另一个球谐基上 $\displaystyle T_i(\mathbf{o}) \approx \sum t_{ij}B_j(\mathbf{o})$ ，将渲染方程变成
 
 $$\displaystyle L_{\mathbf{o}} = \sum(\sum l_it_{ij}) B_j(\mathbf{o})$$
+
+对原函数做一次投影得到一组球谐系数，对得到的球谐函数再做一次投影，得到的是一个球谐系数的矩阵 $t_{ij}$
+
+原渲染方程在进过对 light 做一次投影和对 light transport 做两次投影后，转换成立 light 球谐系数组和 light transport 球谐系数矩阵相乘
 
 用图像理解上述整个过程
 
 ![PRT_Glossy_Rendering](./images/PRT_Glossy_Rendering.png)
+
++ 渲染方程左边是不同方向上的 radiance $L(\mathbf{o})$ ，是一组向量 
++ light 经过球谐处理后得到另一组向量 $l_i$
++ light transport 经过两次不同维度的投影后得到复合球谐系数组，即为球谐系数矩阵 $t_{ij}$
+
+#### PRT 的延申理解
+**理解一：Transport Paths 对光路进行类**
++ $LE$ - 表示从光源出发，直接进入观察方向
++ $LGE$ - 表示从光源出发，经过 Glossy 材质物体弹射一次，进入观察方向
++ 用类似正则的表示
+    + $L(D|G)^*E$ - 表示从光源出发，经过 Glossy 或 Diffuse 材质弹射 ($*$) 次，进入观察方向
+        常见的例子如下，表示光线不同的弹射次数
+
+        ![Transport_Paths_Interreflections](./images/Transport_Paths_Interreflections.png)
+
+    + $LS^*(D|G)^*E$ - 表示从光源出发，先经过 specular 材质弹射 （$*$）次之后，再经过 Glossy 或 Diffuse 材质弹射 ($*$) 次，进入观察方向
+        常见的例子是焦散，表示光线经过 Specular 后被聚焦到了 Diffuse 或 Glossy 的物质上
+
+        ![Transport_Paths_Caustics](./images/Transport_Paths_Caustics.png)
+
+经过上述对各种光路的理解，我们不难发现所有光路都是由光线出发，经过一定路径后到达观察方向
+
+结合 light transport 进行分析，所有的光路都可以拆分为 light 和 light transport
+
+那么，不管光照环境多么复杂，都可以使用 PRT 的思想进行处理
+
+对于实时的情况下，不管光路多么复杂，我们都可以将其看作一个已经预计算处理过的 light transport 
+
+**理解二：Precomputation of light transport**
+之前，我们已经得到了 light transport ，即 $\displaystyle T_i \approx \int_{\Omega} B_i(\mathbf{i}) V(\mathbf{i}) max(0, \mathbf{n \cdot i}) d\mathbf{i}$
+
+这个式子将 light 球谐化后的球谐基给挪了进来，但这个式子本身就很像渲染方程，我们可以将 $B_i(\mathbf{i})$ 看作是 light
+
+light transport 投影到 n 阶的球谐基的这个过程，可以看作是 n 个不同的光照，对场景进行着色得到不同的光照结果
+
+这么理解下，我们可以认为，无论 light transport 多么复杂，都可以被各种光照着色的方式（Path Tracing、Photon Mappingg 等）给解出来
+
+整个过程类似与下图：
+
+![Precomputation_of_light_transport](./images/Precomputation_of_light_transport.png)
 
 ### PRT 的结果
 但是，对于上述的过程，有几个问题：
@@ -418,8 +462,31 @@ $$\displaystyle L_{\mathbf{o}} = \sum(\sum l_it_{ij}) B_j(\mathbf{o})$$
 
 + Diffuse Case
 
-    ![PRT_PRT_Result](./images/PRT_PRT_Result.png)
+    ![PRT_Diffuse_Result](./images/PRT_Diffuse_Result.png)
 
 + Glossy Case
 
+    ![PRT_Glossy_Result](./images/PRT_Glossy_Result.png)
+
++ Arbitrary BRDF Results
+    + Anisotropic BRDFs
+    
+        ![PRT_Anisotropic_Result](./images/PRT_Anisotropic_Result.png)
+
+    + Other BRDFs
+
+        ![PRT_Other_Result](./images/PRT_Other_Result.png)
+
+    + Spatially Varying 不同的位置有不同的 BRDF
+
+        ![PRT_Spatially_Varying_Result](./images/PRT_Spatially_Varying_Result.png)
+
 ### Limitations
++ Low-frequency
+    + SH 本身只适合描述低频信息（我们并不能无限提升阶数来表示高频信息），导致以 SH 为基函数处理的 PRT 只适合低频光照和 BRDF 变化不那么剧烈的材质
++ Dynamic lighting, but static scene/material
+    + PRT 可以处理动态光照（SH 具有旋转不变性，可以计算系数变化来表示投影前的光线变化）
+    + 但 PRT 只能预计算固定的场景和固定的材质，即 light transport 是固定的，如果改变场景就会需要重新预计算
++ Big precomputation data
+    + PRT 需要我们为每个着色点预计算 light transport 并存储
+    + Diffuse 只存储每个点的向量，但是 Glossy 还需要存储每个点的矩阵
