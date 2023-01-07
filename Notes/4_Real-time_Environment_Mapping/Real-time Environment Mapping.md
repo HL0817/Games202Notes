@@ -490,3 +490,70 @@ light transport 投影到 n 阶的球谐基的这个过程，可以看作是 n �
 + Big precomputation data
     + PRT 需要我们为每个着色点预计算 light transport 并存储
     + Diffuse 只存储每个点的向量，但是 Glossy 还需要存储每个点的矩阵
+
+### PRT Follow Up Works
++ More basis functions
++ dot product => triple products
++ static scene => dynamic scene
++ fix matrials => dynamic materials
++ other effects:translucent, hair, ...
++ Precomputation => analytic computation
++ ...
+
+### More Basis Functions
+除了球谐外，还有其他不同性质的基函数，例如：
++ Wavelet 小波
++ Zonal Harmonics
++ Spherical Gaussian
++ Piecewise Constant
+
+简单介绍小波基函数中的一种 —— 2D Haar wavelet
+
+![PRT_2D_Haar_Wavelet](./images/PRT_2D_Haar_Wavelet.png)
+
+不同于定义在球面上的球谐基， Haar Wavelet 是定义在图像上类似于图像块的区域内，除了定义域外，其他地方都没有定义
+
+目标函数到小波基函数的投影有两个比较显著的特点：
++ Wavelet Transformation
+使用小波变化进行投影，将目标函数投影到任意小波基函数上
++ 投影的结果是，很多小波基函数的系数都为 0 或者接近 0
+这意味着我们可以只保留很小一部分非 0 的系数，或者保留较大或者最大的几组系数
+
+投影的优缺点如下：
++ A non-linear approximation
+前面说到我们会保留部分非 0 系数，这将导致投影和恢复是对原函数的非线性近似
++ All-frequency representation
+小波最大的优点，就是可以全频率的表示原函数
+
+做小波变换进行投影，是在 2D 平面做的投影，如何表示球型的光照函数呢？
+答：可以使用 Cubemap 记录光照信息，再将其 6 个面分别做小波变换
+
+投影到小波基函数的过程如下：
+
+![PRT_Wavelet_Transformation](./images/PRT_Wavelet_Transformation.png)
+ 
+对每一张图来说，做一次小波变换，就将低频信息存储在了左上 $1/4$ 的位置里，将储高频信息存储再其他三个块里
+
+观察高频区域，可以发现高频信息很少，绝大多数地方都是 0 ，非 0 值并不多
+
+可以对左上的低频块再继续做小波变换，得到新的更低频的图块和次高频的块
+
+根据需要做不同次数的小波变换可以得到不同的近似结果
+
+用 SH 和 Wavelet 做基函数的渲染结果对比如下：
++ Low frequency vs. All frequency
++ SH vs. Wavelet
+
+![PRT_SH_vs_Wavelet_Rendering_result](./images/PRT_SH_vs_Wavelet_Rendering_result.png)
+
+相同的存储量，小波可以渲染出更多高频的细节，高光阴影等在图像中对比还是非常强烈
+
+Wavelet 的有严重的缺点，小波处理后的光照不可旋转（球谐具有旋转不变性，可以通过系数快速得到旋转后的系数）
+
+小波处理后的光照要旋转，只能先还原光照，对光照做旋转，再将旋转后的光照重新投影到小波基函数上去
+
+### Other
+闫令琪在大学阶段写的第一篇论文就是 PRT 相关的
+《Accurate Translucent Material Rendering under Spherical Gaussian Lights》 —— Pacific Graphics 2012
+
+![PRT_Other_Yan_Paper](./images/PRT_Other_Yan_Paper.png)

@@ -190,7 +190,7 @@ $\large w_{Penumbra}$ 表示阴影的柔和程度，越大越软
 使用遮挡物平均深度算出这个着色点的 filter size
 + Step 3:Percentage Closer Filtering
 
-为了算着色点的 filter size 我们在第一步中去了某个 size 来算计算遮挡物的平均深度，实际消耗上来说， PCSS 比固定大小的 PCF 更消耗性能一些
+为了算着色点的 filter size 我们在第一步中取了某个 size 来算计算遮挡物的平均深度，实际消耗上来说， PCSS 比固定大小的 PCF 更消耗性能一些
 
 那么 blocker search 的 size 怎么取呢，我们使用一种启发式的方法来选取
 
