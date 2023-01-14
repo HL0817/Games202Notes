@@ -1,4 +1,4 @@
-# Real-time Shadows
+# Real-Time Shadows
 
 ## 目录
 + [Shadow Mapping](#shadow-mapping)

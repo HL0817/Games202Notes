@@ -1,4 +1,4 @@
-# Real-tiem Environment Mapping
+# Real-Time Environment Mapping
 
 ## 目录
 + [Recap:Environment Lighting](#recapenvironment-lighting)
