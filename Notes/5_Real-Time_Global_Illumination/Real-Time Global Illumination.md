@@ -64,7 +64,7 @@ Q 点是被直接光照亮的点， P 是被直接光（图中未画出）和一
 
 针对这两个问题，有人总结出了一套解决方案，被成为 Reflective Shadow Maps ，简称 RSM
 
-### RSM
+### Reflective Shadow Map Core
 现在来解决上述的几个问题
 
 #### 如何筛选出照亮 P 点的面光源
@@ -72,22 +72,20 @@ Q 点是被直接光照亮的点， P 是被直接光（图中未画出）和一
 + 可以使用 Shadow Maps 来判断哪些地方被直接光所照亮
 + 同时 Shadow Maps 的每个 texel 正好对应场景的的一小块区域，可以被完美的当作一个面光源
     + 这里是将 SM 的 texel 近似成整体面光源，做了一次近似
-+ 产生一个新的问题，如果 SM 的分辨率是 512x512 的，那么就会有这么多个面光源进行渲染，计量非常大
 + 得到每个“面光源”的 randiance
     + 对于 SM 中的每一个 texel 来说，都能知道光照的方向，如果在固定观察方向的前提下，我们就可以进行 shading
-    + 这里又产生一个新的的问题，我们只能计算观察方向的 randiance ，无法计算从光源出发的其他各个方向的 randiance
 
-使用 SM 解决了筛选光源的问题，但产生了两个新的问题，现在我们来解决这些新问题
+使用 SM 解决了筛选光源的问题，但产生了两个新的问题
++ 如果 SM 的分辨率是 512x512 的，那么就会有这么多个面光源进行渲染，计量非常大
++ 我们只能计算观察方向的 randiance ，无法计算从光源出发的其他各个方向的 randiance
 
-第一个问题，是纯计算量的问题，但它本身并不阻碍我们的“面光源”着色
+现在我们来解决这些新问题
++ 第一个问题，是纯计算量的问题，但它本身并不阻碍我们的“面光源”着色
+    + 因此，第一个问题可以留到优化的时候进行解决
++ 第二个问题，如何才能计算所有光照方向的 randiance 呢？
 
-因此，第一个问题可以留到优化的时候进行解决
-
-第二个问题，如何才能计算所有光照方向的 randiance 呢？
-
-我们可以假设，所有的反射物体（即直接光照亮的物体）是 diffuse 材质的物体，那么它向各个方向反射的光都是一样的
-
-这里只假设反射物体是反射出来的光照是按照 diffuse 计算的，反射物体本身的着色和被间接光照亮的物体的着色仍然是任意材质的
+    + 我们可以假设，所有的反射物体（即直接光照亮的物体）是 diffuse 材质的物体，那么它向各个方向反射的光都是一样的
+    + 这里只假设反射物体是反射出来的光照是按照 diffuse 计算的，反射物体本身的着色和被间接光照亮的物体的着色仍然是任意材质的
 
 那么，现在已经到了所有方向的 Irrandiance ，也就是我们知道了点 P 所需要的所有“面光源的信息”
 
@@ -105,7 +103,7 @@ $$\Large d\omega = \frac {dA \ \ \cos \theta'}{||x' - x||^2}$$
 其中，$\theta' \not = \theta$ ，用得到的式子替换渲染方程中的 $d\omega_i$ 得到
 $$\begin{equation*} \begin{split} L_o(p, \omega_o)
 &= \displaystyle \int_{\Omega_{patch}}L_i(p, \omega_i) V(p, \omega_i) f_r(p, \omega_i, \omega_o) \cos \theta d\omega_i \\
-&= \displaystyle \int_{A_{patch}}L_i(p, \omega_i) V(p, \omega_i) f_r(p, \omega_i, \omega_o) \frac{\cos\theta \cos\theta'}{||x' - x||^2} dA \end{split} \end{equation*}$$
+&= \displaystyle \int_{A_{patch}}L_i(p \to q) V(p, \omega_i) f_r(p, q \to q, \omega_o) \frac{\cos\theta \cos\theta'}{||x' - x||^2} dA \end{split} \end{equation*}$$
 
 使用这种思路，我们可以为着色点计算每个“面光源”对 P 的着色贡献
 
@@ -115,10 +113,13 @@ $$\begin{equation*} \begin{split} L_o(p, \omega_o)
 
 ![RSM_Recap_RecapfromGAMES101Lecture16](./iamges/RSM_Recap_RecapfromGAMES101Lecture16.png)
 
-对于 Q 点而言，我们将其近似成立 RSM 的一个 texel ，把它看作一个面光源；同时，我们有近似的将它的材质理解为了 diffuse 材质（这样处理不用管光线弹射方向，对半球做整体积分就 OK 了）
+对于 Q 点而言，我们将其近似成 RSM 的一个 texel ，把它看作一个面光源；同时，我们又近似的将它的材质理解为了 diffuse 材质（这样处理不用管光线弹射方向，对半球做整体积分就 OK 了）
+
+(强调一下，这里在计算，由 Q 点射向 P 点的 radiance ，即 $L_i(q \to p)$ )
 
 对于每一个 diffuse RSM patch 而言：
 + $f_r = \rho / \pi$
+    + 被假设为 diffuse 之后，Q点的 BRDF 值就固定了
 + $L_i = f_r \cdot \frac {\Phi}{dA}$ （ $\phi$ 是间接光强或光能）
     + 这里是由 BRDF 的定义变换而来
     + BRDF:描述单位面积内固定方向接收到的辐射通量发射到不同方向的数值变化的分布情况
@@ -132,7 +133,7 @@ $$\begin{equation*} \begin{split} L_o(p, \omega_o)
 
 最终得到点 Q （diffuse RSM patch）弹射到点 P 的 irrandiance
 $$\Large \displaystyle E_p(x, n) = \Phi_p \frac{max\{0, \lang n_p | x - x_p \rang \} max\{0, \lang n_ | x_p - x \rang \}}{{|| x - x_p ||}^{4->2}}$$
-上面的公式中，有一个地方需要注意，分母的次方由原论文的的 4 次方改为了 2 次方，闫玲琪说这里是原论文推到错误，从点 P 到点 Q 由一个 falloff 的衰减，应该是 2 次方（没有验证过，我不确定）
+上面的公式中，有一个地方需要注意，分母的次方由原论文的的 4 次方改为了 2 次方，闫玲琪说这里是原论文推到错误，从点 P 到点 Q 由一个 falloff 的衰减，应该是 2 次方（**没有验证过，我不确定**）
 
 对于渲染方程中的其他项，我们都逐一进行了处理，只剩下可见性相关的内容
 
